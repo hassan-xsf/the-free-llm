@@ -25,7 +25,7 @@ export class OpenRouterProvider implements Provider {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${cfg.apiKey}`,
           'HTTP-Referer': 'http://localhost',
-          'X-Title': 'Smart AI Failover Gateway',
+          'X-Title': 'TheFreeLLM',
         },
       });
       const text = res.data?.choices?.[0]?.message?.content || '';

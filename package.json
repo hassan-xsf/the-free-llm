@@ -1,7 +1,7 @@
 {
-  "name": "smart-ai-failover-gateway",
+  "name": "thefreellm",
   "version": "1.0.0",
-  "description": "Smart AI Failover Gateway with multi-provider routing",
+  "description": "TheFreeLLM — one free LLM API powered by Gemini, Groq, and OpenRouter with automatic failover",
   "main": "dist/server.js",
   "scripts": {
     "build": "tsc",

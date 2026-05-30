@@ -19,7 +19,7 @@ async function main() {
 
   app.get('/', (_req, res) => {
     res.json({
-      name: 'Smart AI Failover Gateway',
+      name: 'TheFreeLLM',
       providers: registry.names(),
       endpoints: ['/ai?query=...', '/stats', '/stats.json'],
     });
