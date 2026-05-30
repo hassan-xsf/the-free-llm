@@ -17,15 +17,15 @@ Free-tier limits kill demos. You build something cool, three people try it, the 
 ## Screenshots
 
 <p align="center">
-  <img src="https://github.com/user-attachments/assets/ddb6a804-c39e-44c7-8f44-a04275e124ab" width="70%" alt="Dashboard statistics" />
+  <img src="https://github.com/user-attachments/assets/ddb6a804-c39e-44c7-8f44-a04275e124ab" width="100%" alt="Dashboard statistics" />
 </p>
 
 <p align="center">
-  <img src="https://github.com/user-attachments/assets/db742ce8-bc1e-4bd5-927c-9dbe89849042" width="70%" alt="Playground with code export" />
+  <img src="https://github.com/user-attachments/assets/db742ce8-bc1e-4bd5-927c-9dbe89849042" width="100%" alt="Playground with code export" />
 </p>
 
 <p align="center">
-  <img src="https://github.com/user-attachments/assets/4a6722af-e8f6-4f63-9f64-e4ec944f6ab9" width="70%" alt="Paginated request history" />
+  <img src="https://github.com/user-attachments/assets/4a6722af-e8f6-4f63-9f64-e4ec944f6ab9" width="100%" alt="Paginated request history" />
 </p>
 
 ---
@@ -58,7 +58,7 @@ You don't need all three. The router skips providers with missing keys, but the 
 ### 2. Clone and install
 
 ```
-git clone <your-repo-url> the-free-llm
+git clone https://github.com/hassan-xsf/the-free-llm
 cd the-free-llm
 npm install
 ```
