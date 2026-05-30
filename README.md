@@ -58,7 +58,7 @@ You don't need all three. The router skips providers with missing keys, but the 
 ### 2. Clone and install
 
 ```
-git clone <your-repo-url> the-free-llm
+git clone https://github.com/hassan-xsf/the-free-llm
 cd the-free-llm
 npm install
 ```
