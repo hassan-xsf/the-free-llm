@@ -36,7 +36,14 @@
     
     <header class="flex flex-col md:flex-row justify-between items-start md:items-end border-b border-neutral-800 pb-4">
       <div>
-        <h1 class="text-3xl font-bold text-white mb-1"><span class="text-blue-500">⚡</span> AI_FAILOVER_GATEWAY</h1>
+        <h1 class="mb-1" aria-label="FREE LLM">
+          <svg width="240" height="44" viewBox="0 0 240 44" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M2 6 L66 6 L82 22 L66 38 L2 38 Z" fill="none" stroke="#10b981" stroke-width="2"/>
+            <circle cx="16" cy="22" r="3" fill="#10b981"/>
+            <text x="26" y="27" font-family="JetBrains Mono, monospace" font-weight="700" font-size="14" fill="#10b981">$0</text>
+            <text x="96" y="30" font-family="Space Grotesk, sans-serif" font-weight="700" font-size="26" fill="#ffffff" letter-spacing="0.5">FREE LLM</text>
+          </svg>
+        </h1>
         <div class="text-neutral-400 text-sm tracking-widest">
           SYS.UPTIME: <span id="uptime" class="text-blue-400 font-bold">—</span> // REFRESH_RATE: 10S
         </div>

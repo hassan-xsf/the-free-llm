@@ -1,12 +1,34 @@
-# THE FREE LLM
+<p align="center">
+  <img width="264" height="56" alt="FREE LLM" src="https://github.com/user-attachments/assets/97806c63-e210-4930-ae9e-80cc58feeeaf" />
+</p>
 
-A smart AI failover gateway that routes a single endpoint across multiple free-tier LLM providers, so you can build, demo, and ship without constantly tripping over rate limits.
+<h2 align="center">One Free LLM API — Gemini + Groq + OpenRouter</h2>
+<p align="center">Stacked free tiers behind a single endpoint. Auto-failover when one rate-limits you.</p>
+<p align="center">Built with TypeScript, Express, and a vanilla dashboard.</p>
+
+---
 
 ## Why this exists
 
-As a student, I got tired of hitting API limits on every provider I tried. You spin up something cool, run a few test prompts, and suddenly you can't even demo it to anyone because the free tier is exhausted. Switching providers manually every time is annoying. Sharing a project that breaks the moment three people try it is worse.
+Free-tier limits kill demos. You build something cool, three people try it, the quota is gone. THE FREE LLM stacks Gemini, Groq, and OpenRouter behind one endpoint — when one runs out, the next one's already answering. Drop your free API keys into `.env`, run one command, done.
 
-THE FREE LLM solves this by stacking free tiers. One endpoint, multiple providers behind it (Gemini, Groq, OpenRouter), automatic failover when any one of them rate-limits you, and a cooldown system so the router stops hammering a provider that's already said no. Drop your free API keys into `.env`, run one command, and you have a personal LLM gateway with a usable amount of headroom.
+---
+
+## Screenshots
+
+<p align="center">
+  <img src="https://github.com/user-attachments/assets/ddb6a804-c39e-44c7-8f44-a04275e124ab" width="70%" alt="Dashboard statistics" />
+</p>
+
+<p align="center">
+  <img src="https://github.com/user-attachments/assets/db742ce8-bc1e-4bd5-927c-9dbe89849042" width="70%" alt="Playground with code export" />
+</p>
+
+<p align="center">
+  <img src="https://github.com/user-attachments/assets/4a6722af-e8f6-4f63-9f64-e4ec944f6ab9" width="70%" alt="Paginated request history" />
+</p>
+
+---
 
 ## Features
 
@@ -18,6 +40,8 @@ THE FREE LLM solves this by stacking free tiers. One endpoint, multiple provider
 - Model picker with grouped dropdown (DeepSeek, Kimi, Llama, Qwen, etc.) plus a custom field
 - Secret token auth so randoms on the internet can't drain your keys
 - State persisted to disk every 30 seconds so cooldowns survive restarts
+
+---
 
 ## Setup
 
@@ -41,7 +65,7 @@ npm install
 
 ### 3. Configure `.env`
 
-Create a `.env` file in the project root:
+Copy `.env.example` to `.env` and fill in your keys:
 
 ```
 GEMINI_API_KEY=your_gemini_key
@@ -69,6 +93,8 @@ npm start
 ```
 
 Server starts on `http://localhost:3000`.
+
+---
 
 ## Usage
 
@@ -121,6 +147,8 @@ Open `http://localhost:3000/stats` in a browser. You get a live view of everythi
 
 You can also hit `/stats.json` for the raw data and `/models.json` for the live model catalog from all providers.
 
+---
+
 ## Adding a new provider
 
 This was designed to be easy. To plug in a new provider (say, Together AI or Mistral), you do two things.
@@ -154,6 +182,8 @@ registry.register(new MyProvider());
 ```
 
 That's it. Failover, health tracking, cooldowns, dashboard cards, history, stats — all of it just starts working. The order of `registry.register` calls is the failover priority (first = highest).
+
+---
 
 ## License
 
