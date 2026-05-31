@@ -100,15 +100,20 @@ Server starts on `http://localhost:3000`.
 
 ### Make a request
 
-```
-GET /ai?query=hello
-```
+The endpoint accepts both GET (query params) and POST (JSON body).
 
-With the auth header:
-
+**GET** — simple queries:
 ```
 curl -H "x-secret-token: your_secret_token" \
   "http://localhost:3000/ai?query=write+a+haiku"
+```
+
+**POST** — better for long prompts:
+```
+curl -X POST "http://localhost:3000/ai" \
+  -H "x-secret-token: your_secret_token" \
+  -H "Content-Type: application/json" \
+  -d '{"query": "write a haiku", "provider": "groq", "temperature": 0.7}'
 ```
 
 Response:

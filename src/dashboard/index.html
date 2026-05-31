@@ -62,15 +62,13 @@
       <div id="pg-panel" class="tech-card tech-card-accent p-5 hidden">
         <!-- Endpoint banner -->
         <div class="mb-5 pb-4 border-b border-neutral-800">
-          <div class="text-xs text-neutral-500 mb-1">ENDPOINT</div>
-          <div class="flex items-center gap-2 font-mono normal-case tracking-normal text-sm">
-            <span class="bg-emerald-900/30 text-emerald-400 px-2 py-0.5 text-[11px] font-bold border border-emerald-900/50 tracking-widest uppercase">GET</span>
+          <div class="text-xs text-neutral-500 mb-2">ENDPOINT</div>
+          <div class="flex items-center gap-2 font-mono normal-case tracking-normal text-sm flex-wrap">
+            <button id="pg-method-get" data-method="GET" class="pg-method-btn bg-emerald-900/30 text-emerald-400 px-2 py-0.5 text-[11px] font-bold border border-emerald-500 tracking-widest uppercase cursor-pointer hover:opacity-80">GET</button>
+            <button id="pg-method-post" data-method="POST" class="pg-method-btn text-neutral-500 px-2 py-0.5 text-[11px] font-bold border border-neutral-700 tracking-widest uppercase cursor-pointer hover:border-blue-500 hover:text-blue-400">POST</button>
             <span class="text-white">/ai</span>
-            <span class="text-neutral-500">— requires</span>
-            <span class="text-amber-400">x-secret-token</span>
-            <span class="text-neutral-500">header (or</span>
-            <span class="text-amber-400">?token=</span>
-            <span class="text-neutral-500">query)</span>
+            <span class="text-neutral-500">— requires <span class="text-amber-400">x-secret-token</span></span>
+            <span id="pg-method-hint" class="text-neutral-600 text-[11px]">// GET uses query params · POST sends JSON body</span>
           </div>
         </div>
 
@@ -503,6 +501,7 @@ const pg = {
   copy: document.getElementById('pg-copy'),
 };
 let pgLang = 'curl';
+let pgMethod = 'GET';
 let modelCatalog = {};
 
 const costBadge = {
@@ -649,27 +648,64 @@ function buildParams() {
   return params;
 }
 
-function buildUrl(includeToken = false) {
+function buildUrl(includeToken = false, forceGet = false) {
+  const base = `${location.origin}/ai`;
+  if (pgMethod === 'POST' && !forceGet) return base;
   const params = buildParams();
   if (includeToken && pg.token.value) params.token = pg.token.value;
   const qs = new URLSearchParams(params).toString();
-  const base = `${location.origin}/ai`;
   return qs ? `${base}?${qs}` : base;
 }
 
 function updateCode() {
-  const url = buildUrl(false);
   const tokenDisplay = 'SECRET_TOKEN';
+  const isPost = pgMethod === 'POST';
+  const url = buildUrl(false);
+  const params = buildParams();
+  const bodyObj = Object.fromEntries(Object.entries(params).filter(([,v]) => v !== undefined && v !== ''));
+  const bodyJson = JSON.stringify(bodyObj, null, 2);
   let snippet = '';
   if (pgLang === 'curl') {
-    snippet = `curl -H "x-secret-token: ${tokenDisplay}" \\\n  "${url}"`;
+    if (isPost) {
+      snippet = `curl -X POST "${url}" \\\n  -H "x-secret-token: ${tokenDisplay}" \\\n  -H "Content-Type: application/json" \\\n  -d '${JSON.stringify(bodyObj)}'`;
+    } else {
+      snippet = `curl -H "x-secret-token: ${tokenDisplay}" \\\n  "${url}"`;
+    }
   } else if (pgLang === 'js') {
-    snippet = `const res = await fetch("${url}", {\n  headers: { "x-secret-token": "${tokenDisplay}" }\n});\nconst data = await res.json();\nconsole.log(data);`;
+    if (isPost) {
+      snippet = `const res = await fetch("${url}", {\n  method: "POST",\n  headers: {\n    "x-secret-token": "${tokenDisplay}",\n    "Content-Type": "application/json"\n  },\n  body: JSON.stringify(${bodyJson})\n});\nconst data = await res.json();\nconsole.log(data);`;
+    } else {
+      snippet = `const res = await fetch("${url}", {\n  headers: { "x-secret-token": "${tokenDisplay}" }\n});\nconst data = await res.json();\nconsole.log(data);`;
+    }
   } else if (pgLang === 'python') {
-    snippet = `import requests\n\nres = requests.get(\n    "${url}",\n    headers={"x-secret-token": "${tokenDisplay}"}\n)\nprint(res.json())`;
+    if (isPost) {
+      snippet = `import requests\n\nres = requests.post(\n    "${url}",\n    headers={"x-secret-token": "${tokenDisplay}"},\n    json=${JSON.stringify(bodyObj)}\n)\nprint(res.json())`;
+    } else {
+      snippet = `import requests\n\nres = requests.get(\n    "${url}",\n    headers={"x-secret-token": "${tokenDisplay}"}\n)\nprint(res.json())`;
+    }
   }
   pg.code.textContent = snippet;
 }
+
+document.querySelectorAll('.pg-method-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    pgMethod = btn.dataset.method;
+    document.querySelectorAll('.pg-method-btn').forEach(b => {
+      const isGet = b.dataset.method === 'GET';
+      const activeGet = 'bg-emerald-900/30 text-emerald-400 border-emerald-500';
+      const activePost = 'bg-blue-900/30 text-blue-400 border-blue-500';
+      const inactive = 'text-neutral-500 border-neutral-700';
+      b.className = b.className
+        .replace(/bg-\S+\/30|text-emerald-400|text-blue-400|text-neutral-500|border-emerald-500|border-blue-500|border-neutral-700/g, '').trim();
+      if (b === btn) {
+        b.classList.add(...(pgMethod === 'GET' ? activeGet : activePost).split(' '));
+      } else {
+        b.classList.add(...inactive.split(' '));
+      }
+    });
+    updateCode();
+  });
+});
 
 document.querySelectorAll('.pg-lang-btn').forEach(btn => {
   btn.addEventListener('click', () => {
@@ -723,9 +759,16 @@ pg.run.addEventListener('click', async () => {
   const start = Date.now();
   try {
     const url = buildUrl(false);
-    const headers = {};
-    if (pg.token.value) headers['x-secret-token'] = pg.token.value;
-    const res = await fetch(url, { headers });
+    const headers = { 'x-secret-token': pg.token.value || '' };
+    let fetchOpts;
+    if (pgMethod === 'POST') {
+      const params = buildParams();
+      headers['Content-Type'] = 'application/json';
+      fetchOpts = { method: 'POST', headers, body: JSON.stringify(params) };
+    } else {
+      fetchOpts = { method: 'GET', headers };
+    }
+    const res = await fetch(url, fetchOpts);
     const elapsed = Date.now() - start;
     const ct = res.headers.get('content-type') || '';
     let body;
