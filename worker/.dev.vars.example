@@ -1,0 +1,9 @@
+# Copy to .dev.vars for local `wrangler dev`. Do NOT commit .dev.vars.
+# You don't need all three — the Worker skips providers with a missing key.
+GEMINI_API_KEY=
+GROQ_API_KEY=
+OPENROUTER_API_KEY=
+
+# Optional: require this on /ai via the `x-secret-token` header or ?token=.
+# Leave blank to disable auth locally.
+SECRET_TOKEN=

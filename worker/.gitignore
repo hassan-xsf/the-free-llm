@@ -1,0 +1,5 @@
+node_modules/
+.dev.vars
+.wrangler/
+*.log
+worker-configuration.d.ts
