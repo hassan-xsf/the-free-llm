@@ -32,7 +32,7 @@ export const config = {
       apiKey: process.env.GEMINI_API_KEY || '',
       models: ['gemini-2.5-flash', 'gemini-3.5-flash', 'gemini-3.5-flash-lite', 'gemini-2.5-flash-lite'],
       defaultModel: 'gemini-2.5-flash',
-      priority: 1,
+      priority: 3,
       timeoutMs: 30000,
     } as ProviderConfig,
     groq: {
@@ -40,7 +40,7 @@ export const config = {
       apiKey: process.env.GROQ_API_KEY || '',
       models: ['openai/gpt-oss-120b', 'openai/gpt-oss-20b', 'groq/compound-mini', 'groq/compound'],
       defaultModel: 'openai/gpt-oss-120b',
-      priority: 2,
+      priority: 1,
       timeoutMs: 30000,
     } as ProviderConfig,
     openrouter: {
@@ -54,7 +54,7 @@ export const config = {
         'nvidia/nemotron-3.5-lightning:free',
       ],
       defaultModel: 'nvidia/nemotron-3-super-120b-a12b:free',
-      priority: 3,
+      priority: 5,
       timeoutMs: 30000,
     } as ProviderConfig,
     cohere: {
@@ -80,7 +80,7 @@ export const config = {
       // rather than wasting a failover attempt on a guaranteed rejection.
       models: ['ministral-14b-latest', 'ministral-8b-latest', 'ministral-3b-latest'],
       defaultModel: 'ministral-14b-latest',
-      priority: 5,
+      priority: 2,
       timeoutMs: 30000,
     } as ProviderConfig,
     cloudflare: {
@@ -119,14 +119,17 @@ export const config = {
   },
 };
 
-// Failover order: free tiers first, then cheapest paid. Cloudflare (~$0.05/M)
-// before AionLabs (~$0.70/M, roleplay-tuned rather than general purpose).
+// Failover order is measured, not assumed. Ranked by a liar-detector benchmark
+// (2026-09-08): correctness first, then latency, then cost. Groq and Mistral are
+// the fastest free tiers; OpenRouter drops below the other free providers while
+// its daily quota is exhausted (it costs ~580ms failing through five models);
+// Cloudflare trails the free tiers on both price and a wrong answer in testing.
 export const providerOrder = [
-  'gemini',
   'groq',
-  'openrouter',
-  'cohere',
   'mistral',
+  'gemini',
+  'cohere',
+  'openrouter',
   'cloudflare',
   'aionlabs',
 ] as const;

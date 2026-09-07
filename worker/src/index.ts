@@ -345,7 +345,7 @@ const cloudflare: Provider = {
 // Failover priority: first = highest priority. Free tiers run first; the
 // paid-per-token providers trail them, cheapest first (Cloudflare ~$0.05/M in,
 // AionLabs ~$0.70/M and roleplay-tuned rather than general purpose).
-const PROVIDERS: Provider[] = [gemini, groq, openrouter, cohere, mistral, cloudflare, aionlabs];
+const PROVIDERS: Provider[] = [groq, mistral, gemini, cohere, openrouter, cloudflare, aionlabs];
 
 // --- routing / failover -------------------------------------------------------
 

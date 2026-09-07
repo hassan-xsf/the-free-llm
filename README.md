@@ -33,7 +33,8 @@ Free-tier limits kill demos. You build something cool, three people try it, the 
 ## Features
 
 - Single `GET /ai` endpoint with automatic failover across providers
-- Provider priority: Gemini -> Groq -> OpenRouter -> Cohere -> Mistral -> Cloudflare -> AionLabs
+- Provider priority: Groq -> Mistral -> Gemini -> Cohere -> OpenRouter -> Cloudflare -> AionLabs
+  (ordered by measured correctness, then latency, then cost)
 - Cooldowns: 10 minutes after a rate limit, 2 minutes after a network error/timeout
 - Live dashboard at `/stats` with charts, provider health, and paginated request history
 - Built-in playground for trying requests and exporting the code (cURL / JS / Python)
@@ -63,7 +64,8 @@ The chain is ordered free tiers first, then paid cheapest-first, so the paid pro
 
 | Provider | Cost | Notes |
 |---|---|---|
-| Gemini, Groq, OpenRouter | free tier | The usual suspects |
+| Groq, Mistral, Gemini | free tier | Fastest measured; Groq ~600ms, Mistral ~510ms |
+| OpenRouter | free tier | Below the other free tiers while its daily quota is exhausted |
 | Cohere | free trial key | Command A is a genuinely strong flagship |
 | Mistral | free tier | Free keys only serve `ministral-3b/8b/14b` — the small/medium tiers return `429`, so they're left out of the pool |
 | Cloudflare Workers AI | ~$0.05/M in | Cheapest paid option; uses the cheapest models on the platform |

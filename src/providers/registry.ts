@@ -38,10 +38,10 @@ export const registry = new ProviderRegistry();
 // implements the Provider interface, then add ONE line here.
 // Order = failover priority (first = highest priority).
 // ============================================================
-registry.register(new GeminiProvider());
 registry.register(new GroqProvider());
-registry.register(new OpenRouterProvider());
-registry.register(new CohereProvider());
 registry.register(new MistralProvider());
+registry.register(new GeminiProvider());
+registry.register(new CohereProvider());
+registry.register(new OpenRouterProvider());
 registry.register(new CloudflareProvider());
 registry.register(new AionLabsProvider());
