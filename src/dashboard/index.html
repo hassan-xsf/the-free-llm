@@ -93,6 +93,10 @@
                   <option value="gemini">GEMINI</option>
                   <option value="groq">GROQ</option>
                   <option value="openrouter">OPENROUTER</option>
+                  <option value="cohere">COHERE</option>
+                  <option value="mistral">MISTRAL</option>
+                  <option value="cloudflare">CLOUDFLARE</option>
+                  <option value="aionlabs">AIONLABS</option>
                 </select>
               </div>
               <div>
@@ -388,8 +392,11 @@ function renderCharts(snap) {
       labels: Object.keys(dist),
       datasets: [{ 
         data: Object.values(dist), 
-        // Sophisticated tech palette: Blue, Purple, Emerald, Amber
-        backgroundColor: ['#3b82f6', '#8b5cf6', '#10b981', '#f59e0b'], 
+        // One colour per provider, in failover order: Blue, Purple, Emerald,
+        // Amber, Pink, Cyan, Orange. Cycles if more providers are added.
+        backgroundColor: Object.keys(dist).map((_, i) =>
+          ['#3b82f6', '#8b5cf6', '#10b981', '#f59e0b', '#ec4899', '#06b6d4', '#f97316'][i % 7]
+        ),
         borderColor: '#0a0a0a', 
         borderWidth: 2 
       }]
@@ -613,10 +620,25 @@ function handleModelChange() {
   updateCode();
 }
 
+// Rebuild the provider dropdown from the catalog so new providers appear
+// automatically — the markup only carries AUTO plus a static fallback list for
+// the case where /models.json can't be reached.
+function populateProviders() {
+  const keys = Object.keys(modelCatalog);
+  if (!keys.length) return;
+  const previous = pg.provider.value;
+  pg.provider.innerHTML =
+    '<option value="">AUTO (FAILOVER)</option>' +
+    keys.map(k => `<option value="${k}">${k.toUpperCase()}</option>`).join('');
+  // Keep the user's selection if that provider still exists.
+  if (previous && keys.includes(previous)) pg.provider.value = previous;
+}
+
 async function loadModelCatalog() {
   try {
     const res = await fetch('/models.json');
     modelCatalog = await res.json();
+    populateProviders();
     populateModels();
   } catch (e) {
     console.error('Failed to load model catalog', e);
