@@ -2,6 +2,10 @@ import { Provider } from './types';
 import { GeminiProvider } from './gemini';
 import { GroqProvider } from './groq';
 import { OpenRouterProvider } from './openrouter';
+import { CohereProvider } from './cohere';
+import { MistralProvider } from './mistral';
+import { CloudflareProvider } from './cloudflare';
+import { AionLabsProvider } from './aionlabs';
 
 class ProviderRegistry {
   private providers = new Map<string, Provider>();
@@ -37,3 +41,7 @@ export const registry = new ProviderRegistry();
 registry.register(new GeminiProvider());
 registry.register(new GroqProvider());
 registry.register(new OpenRouterProvider());
+registry.register(new CohereProvider());
+registry.register(new MistralProvider());
+registry.register(new CloudflareProvider());
+registry.register(new AionLabsProvider());

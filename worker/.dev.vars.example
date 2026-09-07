@@ -1,8 +1,17 @@
 # Copy to .dev.vars for local `wrangler dev`. Do NOT commit .dev.vars.
-# You don't need all three — the Worker skips providers with a missing key.
+# You don't need all of them — the Worker skips providers with a missing key.
 GEMINI_API_KEY=
 GROQ_API_KEY=
 OPENROUTER_API_KEY=
+COHERE_API_KEY=
+
+# Free-tier Mistral keys only serve the `ministral-*` models.
+MISTRAL_API_KEY=
+
+# Paid-per-token, so these trail the free tiers (cheapest first).
+CLOUDFLARE_ACCOUNT_ID=
+CLOUDFLARE_API_TOKEN=
+AION_LABS_API_KEY=
 
 # Optional: require this on /ai via the `x-secret-token` header or ?token=.
 # Leave blank to disable auth locally.

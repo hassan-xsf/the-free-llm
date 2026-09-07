@@ -25,6 +25,41 @@ const geminiCatalog: ModelInfo[] = [
   { id: 'gemini-2.0-flash-lite', label: 'Gemini 2.0 Flash Lite', contextK: 1000, cost: 'free-tier', family: 'Gemini 2.0' },
 ];
 
+// Cloudflare Workers AI — the pool the router rotates through, cheapest first.
+// Prices are USD per million tokens, taken from the Workers AI model catalog.
+const cloudflareCatalog: ModelInfo[] = [
+  { id: '@cf/qwen/qwen3-30b-a3b-fp8', label: 'Qwen3 30B A3B (FP8)', cost: 'paid', promptPrice: 0.0509, completionPrice: 0.335, family: 'Qwen', popular: true, notes: 'Default — 30B MoE at 3B pricing' },
+  { id: '@cf/zai-org/glm-4.7-flash', label: 'GLM 4.7 Flash', cost: 'paid', promptPrice: 0.0605, completionPrice: 0.4, family: 'GLM', popular: true },
+  { id: '@cf/meta/llama-3.2-3b-instruct', label: 'Llama 3.2 3B Instruct', cost: 'paid', promptPrice: 0.0509, completionPrice: 0.335, family: 'Llama', popular: true },
+  { id: '@cf/google/gemma-4-26b-a4b-it', label: 'Gemma 4 26B A4B', cost: 'paid', promptPrice: 0.1, completionPrice: 0.3, family: 'Gemma', popular: true },
+  { id: '@cf/ibm-granite/granite-4.0-h-micro', label: 'Granite 4.0 H Micro', cost: 'paid', promptPrice: 0.017, completionPrice: 0.112, family: 'Granite', notes: 'Cheapest model on Workers AI' },
+];
+
+// Cohere — trial keys are free (rate-limited), so the pool leads with the
+// flagship Command A rather than the smaller models.
+const cohereCatalog: ModelInfo[] = [
+  { id: 'command-a-03-2025', label: 'Command A', contextK: 288, cost: 'free-tier', family: 'Cohere', popular: true, notes: 'Default — flagship' },
+  { id: 'command-r-08-2024', label: 'Command R', contextK: 128, cost: 'free-tier', family: 'Cohere', popular: true },
+  { id: 'command-r7b-12-2024', label: 'Command R7B', contextK: 132, cost: 'free-tier', family: 'Cohere', notes: 'Smallest & fastest' },
+  { id: 'c4ai-aya-expanse-32b', label: 'Aya Expanse 32B', contextK: 128, cost: 'free-tier', family: 'Cohere', notes: 'Multilingual' },
+];
+
+// Mistral — free-tier keys only serve the `ministral-*` family; the small and
+// medium tiers return 429, so they're deliberately absent.
+const mistralCatalog: ModelInfo[] = [
+  { id: 'ministral-14b-latest', label: 'Ministral 14B', contextK: 256, cost: 'free-tier', family: 'Mistral', popular: true, notes: 'Default — largest on free tier' },
+  { id: 'ministral-8b-latest', label: 'Ministral 8B', contextK: 256, cost: 'free-tier', family: 'Mistral', popular: true },
+  { id: 'ministral-3b-latest', label: 'Ministral 3B', contextK: 128, cost: 'free-tier', family: 'Mistral', notes: 'Fastest' },
+];
+
+// AionLabs — roleplay/storytelling specialist. Paid; USD per million tokens.
+const aionlabsCatalog: ModelInfo[] = [
+  { id: 'aion-labs/aion-3.0-mini', label: 'Aion 3.0 Mini', contextK: 128, cost: 'paid', promptPrice: 0.7, completionPrice: 1.4, family: 'Aion', popular: true, notes: 'Default — cheapest' },
+  { id: 'aion-labs/aion-2.0', label: 'Aion 2.0', contextK: 128, cost: 'paid', promptPrice: 0.8, completionPrice: 1.6, family: 'Aion', notes: 'DeepSeek V3.2 variant' },
+  { id: 'aion-labs/aion-rp-llama-3.1-8b', label: 'Aion-RP 1.0 (8B)', contextK: 32, cost: 'paid', promptPrice: 0.8, completionPrice: 1.6, family: 'Aion' },
+  { id: 'aion-labs/aion-3.0', label: 'Aion 3.0', contextK: 128, cost: 'paid', promptPrice: 3, completionPrice: 6, family: 'Aion', notes: 'Highest quality' },
+];
+
 const POPULAR_FAMILIES = new Set([
   'DeepSeek', 'Kimi', 'GPT-OSS', 'Llama', 'Qwen', 'Claude', 'Gemini', 'Mistral', 'Gemma', 'GLM',
 ]);
@@ -50,6 +85,9 @@ function detectFamily(id: string, name?: string): string {
   if (s.includes('gpt-')) return 'GPT';
   if (s.includes('o1') || s.includes('o3')) return 'OpenAI Reasoning';
   if (s.includes('minimax')) return 'MiniMax';
+  if (s.includes('granite')) return 'Granite';
+  if (s.includes('aion')) return 'Aion';
+  if (s.includes('aya')) return 'Cohere';
   if (s.includes('whisper')) return 'Whisper';
   if (s.includes('liquid') || s.includes('lfm')) return 'Liquid';
   return 'Other';
@@ -162,6 +200,10 @@ router.get('/models.json', async (_req, res) => {
     gemini: geminiCatalog,
     groq,
     openrouter,
+    cohere: cohereCatalog,
+    mistral: mistralCatalog,
+    cloudflare: cloudflareCatalog,
+    aionlabs: aionlabsCatalog,
   });
 });
 

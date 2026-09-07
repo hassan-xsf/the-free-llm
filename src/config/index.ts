@@ -13,6 +13,8 @@ export interface ProviderConfig {
   defaultModel: string;
   priority: number;
   timeoutMs: number;
+  // Only Cloudflare Workers AI needs this — its endpoint is account-scoped.
+  accountId?: string;
 }
 
 export const config = {
@@ -28,7 +30,7 @@ export const config = {
     gemini: {
       name: 'gemini',
       apiKey: process.env.GEMINI_API_KEY || '',
-      models: ['gemini-2.5-flash', 'gemini-3.5-flash-lite', 'gemini-2.5-flash-lite'],
+      models: ['gemini-2.5-flash', 'gemini-3.5-flash', 'gemini-3.5-flash-lite', 'gemini-2.5-flash-lite'],
       defaultModel: 'gemini-2.5-flash',
       priority: 1,
       timeoutMs: 30000,
@@ -36,7 +38,7 @@ export const config = {
     groq: {
       name: 'groq',
       apiKey: process.env.GROQ_API_KEY || '',
-      models: ['openai/gpt-oss-120b', 'openai/gpt-oss-20b', 'groq/compound-mini'],
+      models: ['openai/gpt-oss-120b', 'openai/gpt-oss-20b', 'groq/compound-mini', 'groq/compound'],
       defaultModel: 'openai/gpt-oss-120b',
       priority: 2,
       timeoutMs: 30000,
@@ -46,15 +48,86 @@ export const config = {
       apiKey: process.env.OPENROUTER_API_KEY || '',
       models: [
         'nvidia/nemotron-3-super-120b-a12b:free',
-        'z-ai/glm-5.2:free',
+        'minimax/minimax-m3:free',
         'google/gemma-4-31b-it:free',
+        'google/gemma-4-26b-a4b-it:free',
+        'nvidia/nemotron-3.5-lightning:free',
       ],
       defaultModel: 'nvidia/nemotron-3-super-120b-a12b:free',
       priority: 3,
       timeoutMs: 30000,
     } as ProviderConfig,
+    cohere: {
+      name: 'cohere',
+      apiKey: process.env.COHERE_API_KEY || '',
+      // Ordered strongest-first: Command A is Cohere's flagship, and trial keys
+      // cost nothing, so quality beats size here. Aya is a multilingual fallback.
+      models: [
+        'command-a-03-2025',
+        'command-r-08-2024',
+        'command-r7b-12-2024',
+        'c4ai-aya-expanse-32b',
+      ],
+      defaultModel: 'command-a-03-2025',
+      priority: 4,
+      timeoutMs: 30000,
+    } as ProviderConfig,
+    mistral: {
+      name: 'mistral',
+      apiKey: process.env.MISTRAL_API_KEY || '',
+      // Free-tier keys only serve the `ministral-*` family — mistral-small and
+      // -medium return 429 regardless of volume, so they're left out of the pool
+      // rather than wasting a failover attempt on a guaranteed rejection.
+      models: ['ministral-14b-latest', 'ministral-8b-latest', 'ministral-3b-latest'],
+      defaultModel: 'ministral-14b-latest',
+      priority: 5,
+      timeoutMs: 30000,
+    } as ProviderConfig,
+    cloudflare: {
+      name: 'cloudflare',
+      apiKey: process.env.CLOUDFLARE_API_TOKEN || '',
+      accountId: process.env.CLOUDFLARE_ACCOUNT_ID || '',
+      // Workers AI is paid-per-token (no free tier), so this pool is ordered
+      // cheapest-first by blended price: qwen3-30b is a 30B MoE billed at the
+      // 3B rate, and granite-micro is the cheapest model on the platform.
+      models: [
+        '@cf/qwen/qwen3-30b-a3b-fp8',
+        '@cf/zai-org/glm-4.7-flash',
+        '@cf/meta/llama-3.2-3b-instruct',
+        '@cf/google/gemma-4-26b-a4b-it',
+        '@cf/ibm-granite/granite-4.0-h-micro',
+      ],
+      defaultModel: '@cf/qwen/qwen3-30b-a3b-fp8',
+      priority: 6,
+      timeoutMs: 30000,
+    } as ProviderConfig,
+    aionlabs: {
+      name: 'aionlabs',
+      apiKey: process.env.AION_LABS_API_KEY || '',
+      // AionLabs specialises in roleplay/storytelling and is the priciest option
+      // here (~$0.70/M in), so it sits last. Ordered cheapest-first.
+      models: [
+        'aion-labs/aion-3.0-mini',
+        'aion-labs/aion-2.0',
+        'aion-labs/aion-rp-llama-3.1-8b',
+        'aion-labs/aion-3.0',
+      ],
+      defaultModel: 'aion-labs/aion-3.0-mini',
+      priority: 7,
+      timeoutMs: 30000,
+    } as ProviderConfig,
   },
 };
 
-export const providerOrder = ['gemini', 'groq', 'openrouter'] as const;
+// Failover order: free tiers first, then cheapest paid. Cloudflare (~$0.05/M)
+// before AionLabs (~$0.70/M, roleplay-tuned rather than general purpose).
+export const providerOrder = [
+  'gemini',
+  'groq',
+  'openrouter',
+  'cohere',
+  'mistral',
+  'cloudflare',
+  'aionlabs',
+] as const;
 export type ProviderName = (typeof providerOrder)[number];

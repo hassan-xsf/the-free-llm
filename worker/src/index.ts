@@ -2,7 +2,8 @@
  * TheFreeLLM — Cloudflare Worker edition.
  *
  * A dependency-free port of the Express app: one free LLM endpoint that fails
- * over Gemini -> Groq -> OpenRouter. Uses native fetch only (no axios, no
+ * over Gemini -> Groq -> OpenRouter -> Cohere -> Mistral -> Cloudflare ->
+ * AionLabs (free tiers first, then cheapest paid). Uses native fetch only (no axios, no
  * Express, no filesystem), so it runs on the Workers runtime as-is.
  *
  * Endpoints:
@@ -15,6 +16,11 @@ interface Env {
   GEMINI_API_KEY?: string;
   GROQ_API_KEY?: string;
   OPENROUTER_API_KEY?: string;
+  COHERE_API_KEY?: string;
+  MISTRAL_API_KEY?: string;
+  CLOUDFLARE_ACCOUNT_ID?: string;
+  CLOUDFLARE_API_TOKEN?: string;
+  AION_LABS_API_KEY?: string;
   SECRET_TOKEN?: string;
 }
 
@@ -54,18 +60,57 @@ const TIMEOUT_MS = 30000;
 // zero delay) and, on a retryable failure, immediately tries the next model in the
 // same provider before failing over to the next provider.
 const MODELS = {
-  gemini: ['gemini-2.5-flash', 'gemini-3.5-flash-lite', 'gemini-2.5-flash-lite'],
-  groq: ['openai/gpt-oss-120b', 'openai/gpt-oss-20b', 'groq/compound-mini'],
+  gemini: ['gemini-2.5-flash', 'gemini-3.5-flash', 'gemini-3.5-flash-lite', 'gemini-2.5-flash-lite'],
+  groq: ['openai/gpt-oss-120b', 'openai/gpt-oss-20b', 'groq/compound-mini', 'groq/compound'],
   openrouter: [
     'nvidia/nemotron-3-super-120b-a12b:free',
-    'z-ai/glm-5.2:free',
+    'minimax/minimax-m3:free',
     'google/gemma-4-31b-it:free',
+    'google/gemma-4-26b-a4b-it:free',
+    'nvidia/nemotron-3.5-lightning:free',
+  ],
+  // Trial keys cost nothing, so this pool is ordered strongest-first.
+  cohere: [
+    'command-a-03-2025',
+    'command-r-08-2024',
+    'command-r7b-12-2024',
+    'c4ai-aya-expanse-32b',
+  ],
+  // Free-tier keys only serve the `ministral-*` family — mistral-small and
+  // -medium return 429 regardless of volume, so they're left out of the pool
+  // rather than wasting a failover attempt on a guaranteed rejection.
+  mistral: ['ministral-14b-latest', 'ministral-8b-latest', 'ministral-3b-latest'],
+  // Workers AI is paid-per-token (no free tier), so this pool is ordered
+  // cheapest-first by blended price: qwen3-30b is a 30B MoE billed at the 3B
+  // rate, and granite-micro is the cheapest model on the platform.
+  cloudflare: [
+    '@cf/qwen/qwen3-30b-a3b-fp8',
+    '@cf/zai-org/glm-4.7-flash',
+    '@cf/meta/llama-3.2-3b-instruct',
+    '@cf/google/gemma-4-26b-a4b-it',
+    '@cf/ibm-granite/granite-4.0-h-micro',
+  ],
+  // Roleplay/storytelling specialist and the priciest option here (~$0.70/M in),
+  // so it sits last in the chain. Ordered cheapest-first.
+  aionlabs: [
+    'aion-labs/aion-3.0-mini',
+    'aion-labs/aion-2.0',
+    'aion-labs/aion-rp-llama-3.1-8b',
+    'aion-labs/aion-3.0',
   ],
 };
 
 // Per-provider rotation cursor. Advanced once per request so load spreads across
 // models. Module-level state is fine: it's a best-effort hint, not correctness.
-const rotation: Record<string, number> = { gemini: 0, groq: 0, openrouter: 0 };
+const rotation: Record<string, number> = {
+  gemini: 0,
+  groq: 0,
+  openrouter: 0,
+  cohere: 0,
+  mistral: 0,
+  cloudflare: 0,
+  aionlabs: 0,
+};
 
 // Return this provider's models ordered starting at the current rotation cursor,
 // then advance the cursor by one. Caller tries them in order until one succeeds.
@@ -105,8 +150,12 @@ async function postJSON(
 
   const data: any = await res.json().catch(() => ({}));
   if (!res.ok) {
-    const msg = data?.error?.message || `HTTP ${res.status}`;
-    if (res.status === 429 || /quota|rate limit/i.test(msg)) {
+    // Error envelopes differ by provider: { error: { message } } for the
+    // OpenAI-compatible ones, { errors: [{ message }] } for Cloudflare v4, and
+    // a bare { message } for Cohere.
+    const msg =
+      data?.error?.message || data?.errors?.[0]?.message || data?.message || `HTTP ${res.status}`;
+    if (res.status === 429 || /quota|rate limit|capacity|trial/i.test(msg)) {
       throw new ProviderError(msg, 'rate_limit', res.status);
     }
     if (res.status === 502 || res.status === 503 || res.status === 504) {
@@ -190,8 +239,113 @@ const openrouter: Provider = {
   },
 };
 
-// Failover priority: first = highest priority.
-const PROVIDERS: Provider[] = [gemini, groq, openrouter];
+const cohere: Provider = {
+  name: 'cohere',
+  models: MODELS.cohere,
+  isConfigured: (env) => Boolean(env.COHERE_API_KEY),
+  async generate(prompt, model, options, env) {
+    const messages: any[] = [];
+    if (options.system) messages.push({ role: 'system', content: options.system });
+    messages.push({ role: 'user', content: prompt });
+    const body: any = { model, messages };
+    if (options.temperature !== undefined) body.temperature = options.temperature;
+    if (options.maxTokens !== undefined) body.max_tokens = options.maxTokens;
+
+    // Cohere v2 takes OpenAI-style messages but returns content as an array of
+    // typed blocks rather than a single string.
+    const data = await postJSON(
+      'https://api.cohere.com/v2/chat',
+      body,
+      { Authorization: `Bearer ${env.COHERE_API_KEY}` },
+      options.timeoutMs || TIMEOUT_MS
+    );
+    const text: string = (data?.message?.content || [])
+      .filter((b: any) => b?.type === 'text' || typeof b?.text === 'string')
+      .map((b: any) => b.text)
+      .join('');
+    if (!text) throw new ProviderError('Empty response from Cohere', 'error');
+    return { text, model, provider: 'cohere' };
+  },
+};
+
+const mistral: Provider = {
+  name: 'mistral',
+  models: MODELS.mistral,
+  isConfigured: (env) => Boolean(env.MISTRAL_API_KEY),
+  async generate(prompt, model, options, env) {
+    const messages: any[] = [];
+    if (options.system) messages.push({ role: 'system', content: options.system });
+    messages.push({ role: 'user', content: prompt });
+    const body: any = { model, messages };
+    if (options.temperature !== undefined) body.temperature = options.temperature;
+    if (options.maxTokens !== undefined) body.max_tokens = options.maxTokens;
+
+    const data = await postJSON(
+      'https://api.mistral.ai/v1/chat/completions',
+      body,
+      { Authorization: `Bearer ${env.MISTRAL_API_KEY}` },
+      options.timeoutMs || TIMEOUT_MS
+    );
+    const text: string = data?.choices?.[0]?.message?.content || '';
+    if (!text) throw new ProviderError('Empty response from Mistral', 'error');
+    return { text, model, provider: 'mistral' };
+  },
+};
+
+const aionlabs: Provider = {
+  name: 'aionlabs',
+  models: MODELS.aionlabs,
+  isConfigured: (env) => Boolean(env.AION_LABS_API_KEY),
+  async generate(prompt, model, options, env) {
+    const messages: any[] = [];
+    if (options.system) messages.push({ role: 'system', content: options.system });
+    messages.push({ role: 'user', content: prompt });
+    const body: any = { model, messages };
+    if (options.temperature !== undefined) body.temperature = options.temperature;
+    if (options.maxTokens !== undefined) body.max_tokens = options.maxTokens;
+
+    const data = await postJSON(
+      'https://api.aionlabs.ai/v1/chat/completions',
+      body,
+      { Authorization: `Bearer ${env.AION_LABS_API_KEY}` },
+      options.timeoutMs || TIMEOUT_MS
+    );
+    const text: string = data?.choices?.[0]?.message?.content || '';
+    if (!text) throw new ProviderError('Empty response from AionLabs', 'error');
+    return { text, model, provider: 'aionlabs' };
+  },
+};
+
+const cloudflare: Provider = {
+  name: 'cloudflare',
+  models: MODELS.cloudflare,
+  isConfigured: (env) => Boolean(env.CLOUDFLARE_ACCOUNT_ID && env.CLOUDFLARE_API_TOKEN),
+  async generate(prompt, model, options, env) {
+    const messages: any[] = [];
+    if (options.system) messages.push({ role: 'system', content: options.system });
+    messages.push({ role: 'user', content: prompt });
+    const body: any = { model, messages };
+    if (options.temperature !== undefined) body.temperature = options.temperature;
+    if (options.maxTokens !== undefined) body.max_tokens = options.maxTokens;
+
+    // Workers AI exposes an OpenAI-compatible chat endpoint, so the body shape
+    // matches Groq/OpenRouter — only the URL and auth differ.
+    const data = await postJSON(
+      `https://api.cloudflare.com/client/v4/accounts/${env.CLOUDFLARE_ACCOUNT_ID}/ai/v1/chat/completions`,
+      body,
+      { Authorization: `Bearer ${env.CLOUDFLARE_API_TOKEN}` },
+      options.timeoutMs || TIMEOUT_MS
+    );
+    const text: string = data?.choices?.[0]?.message?.content || '';
+    if (!text) throw new ProviderError('Empty response from Cloudflare', 'error');
+    return { text, model, provider: 'cloudflare' };
+  },
+};
+
+// Failover priority: first = highest priority. Free tiers run first; the
+// paid-per-token providers trail them, cheapest first (Cloudflare ~$0.05/M in,
+// AionLabs ~$0.70/M and roleplay-tuned rather than general purpose).
+const PROVIDERS: Provider[] = [gemini, groq, openrouter, cohere, mistral, cloudflare, aionlabs];
 
 // --- routing / failover -------------------------------------------------------
 

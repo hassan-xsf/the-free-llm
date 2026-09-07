@@ -2,7 +2,7 @@
   <img width="264" height="56" alt="FREE LLM" src="https://github.com/user-attachments/assets/97806c63-e210-4930-ae9e-80cc58feeeaf" />
 </p>
 
-<h2 align="center">One Free LLM API — Gemini + Groq + OpenRouter</h2>
+<h2 align="center">One Free LLM API — Gemini + Groq + OpenRouter + Cohere + Mistral + Cloudflare + AionLabs</h2>
 <p align="center">Stacked free tiers behind a single endpoint. Auto-failover when one rate-limits you.</p>
 <p align="center">Built with TypeScript, Express, and a vanilla dashboard.</p>
 
@@ -10,7 +10,7 @@
 
 ## Why this exists
 
-Free-tier limits kill demos. You build something cool, three people try it, the quota is gone. THE FREE LLM stacks Gemini, Groq, and OpenRouter behind one endpoint — when one runs out, the next one's already answering. Drop your free API keys into `.env`, run one command, done.
+Free-tier limits kill demos. You build something cool, three people try it, the quota is gone. THE FREE LLM stacks Gemini, Groq, OpenRouter, Cohere, Mistral, Cloudflare Workers AI, and AionLabs behind one endpoint — when one runs out, the next one's already answering. Drop your free API keys into `.env`, run one command, done.
 
 ---
 
@@ -33,7 +33,7 @@ Free-tier limits kill demos. You build something cool, three people try it, the 
 ## Features
 
 - Single `GET /ai` endpoint with automatic failover across providers
-- Provider priority: Gemini -> Groq -> OpenRouter
+- Provider priority: Gemini -> Groq -> OpenRouter -> Cohere -> Mistral -> Cloudflare -> AionLabs
 - Cooldowns: 10 minutes after a rate limit, 2 minutes after a network error/timeout
 - Live dashboard at `/stats` with charts, provider health, and paginated request history
 - Built-in playground for trying requests and exporting the code (cURL / JS / Python)
@@ -47,13 +47,29 @@ Free-tier limits kill demos. You build something cool, three people try it, the 
 
 ### 1. Get free API keys
 
-All three providers have generous free tiers. Sign up and grab a key:
+The first five have free tiers. Sign up and grab a key:
 
 - **Gemini** — https://aistudio.google.com/apikey
 - **Groq** — https://console.groq.com/keys
 - **OpenRouter** — https://openrouter.ai/keys
+- **Cohere** — https://dashboard.cohere.com/api-keys (trial keys are free, rate-limited)
+- **Mistral** — https://console.mistral.ai/api-keys
+- **Cloudflare Workers AI** — https://dash.cloudflare.com/profile/api-tokens (optional, paid-per-token)
+- **AionLabs** — https://www.aionlabs.ai (optional, paid-per-token)
 
-You don't need all three. The router skips providers with missing keys, but the more you add the more headroom you get.
+You don't need all of them. The router skips providers with missing keys, but the more you add the more headroom you get.
+
+The chain is ordered free tiers first, then paid cheapest-first, so the paid providers only cost you anything once every free option is exhausted:
+
+| Provider | Cost | Notes |
+|---|---|---|
+| Gemini, Groq, OpenRouter | free tier | The usual suspects |
+| Cohere | free trial key | Command A is a genuinely strong flagship |
+| Mistral | free tier | Free keys only serve `ministral-3b/8b/14b` — the small/medium tiers return `429`, so they're left out of the pool |
+| Cloudflare Workers AI | ~$0.05/M in | Cheapest paid option; uses the cheapest models on the platform |
+| AionLabs | ~$0.70/M in | Roleplay/storytelling specialist, so it's last for general Q&A |
+
+Leave any provider's variables blank to skip it entirely.
 
 ### 2. Clone and install
 
@@ -71,6 +87,11 @@ Copy `.env.example` to `.env` and fill in your keys:
 GEMINI_API_KEY=your_gemini_key
 GROQ_API_KEY=your_groq_key
 OPENROUTER_API_KEY=your_openrouter_key
+COHERE_API_KEY=your_cohere_key
+MISTRAL_API_KEY=your_mistral_key
+CLOUDFLARE_ACCOUNT_ID=your_cloudflare_account_id
+CLOUDFLARE_API_TOKEN=your_cloudflare_api_token
+AION_LABS_API_KEY=your_aionlabs_key
 PORT=3000
 SECRET_TOKEN=pick_any_random_string
 ```
@@ -133,7 +154,7 @@ Response:
 | Param | Description |
 |---|---|
 | `query` | The prompt (required) |
-| `provider` | Force `gemini`, `groq`, or `openrouter` (disables failover) |
+| `provider` | Force `gemini`, `groq`, `openrouter`, `cohere`, `mistral`, `cloudflare`, or `aionlabs` (disables failover) |
 | `model` | Override the default model |
 | `response` | `json` (default) or `text` |
 | `temperature` | Float |
