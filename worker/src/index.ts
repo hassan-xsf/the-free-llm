@@ -23,7 +23,6 @@ interface Env {
   AION_LABS_API_KEY?: string;
   LLM7_API_KEY?: string;
   SECRET_TOKEN?: string;
-  COOLDOWNS?: KVNamespace;
 }
 
 type FailureKind = 'rate_limit' | 'timeout' | 'network' | 'error';
@@ -391,25 +390,12 @@ const PROVIDERS: Provider[] = [groq, mistral, gemini, cohere, openrouter, llm7, 
 
 // --- cooldowns ----------------------------------------------------------------
 
-// Rate-limited models are skipped until their cooldown expires. Stored as one KV
-// key ({ "provider/model": expiresAtMs }) so a request costs one read, and at most
-// one write when something 429s. Limits are per model (Groq, Mistral), so the
-// cooldown is too: one model 429ing doesn't bench its siblings.
-// ponytail: concurrent writes can drop each other's entries; worst case is one
-// extra 429. Move to a Durable Object if that ever matters.
-const COOLDOWN_KEY = 'cooldowns';
+// Rate-limited models are skipped until their cooldown expires. Per model, since
+// limits are per model (Groq, Mistral): one model 429ing doesn't bench its siblings.
+// ponytail: in-memory, so each isolate learns on its own and forgets on recycle;
+// costs nothing, unlike KV's daily op cap.
+const cooldowns: Record<string, number> = {}; // "provider/model" -> expiresAtMs
 const DEFAULT_COOLDOWN_SEC = 10 * 60;
-
-async function loadCooldowns(env: Env): Promise<Record<string, number>> {
-  if (!env.COOLDOWNS) return {};
-  const all = ((await env.COOLDOWNS.get(COOLDOWN_KEY, 'json').catch(() => null)) || {}) as Record<
-    string,
-    number
-  >;
-  const now = Date.now();
-  for (const k of Object.keys(all)) if (all[k] <= now) delete all[k];
-  return all;
-}
 
 // --- routing / failover -------------------------------------------------------
 
@@ -428,24 +414,6 @@ async function route(
   requestedProvider: string | undefined,
   options: GenerateOptions,
   env: Env
-): Promise<RouteResult> {
-  const cooldowns = await loadCooldowns(env);
-  const before = JSON.stringify(cooldowns);
-  const result = await routeWith(query, requestedProvider, options, env, cooldowns);
-  if (env.COOLDOWNS && JSON.stringify(cooldowns) !== before) {
-    // KV's minimum TTL is 60s; entries carry their own expiry anyway.
-    const ttl = Math.max(60, Math.ceil((Math.max(...Object.values(cooldowns)) - Date.now()) / 1000));
-    await env.COOLDOWNS.put(COOLDOWN_KEY, JSON.stringify(cooldowns), { expirationTtl: ttl }).catch(() => {});
-  }
-  return result;
-}
-
-async function routeWith(
-  query: string,
-  requestedProvider: string | undefined,
-  options: GenerateOptions,
-  env: Env,
-  cooldowns: Record<string, number>
 ): Promise<RouteResult> {
   const attempts: RouteResult['attempts'] = [];
 
@@ -476,7 +444,7 @@ async function routeWith(
       ? [options.model]
       : rotatedModels(p.name as keyof typeof MODELS);
     for (const model of models) {
-      if (cooldowns[`${p.name}/${model}`]) {
+      if ((cooldowns[`${p.name}/${model}`] || 0) > Date.now()) {
         attempts.push({ provider: p.name, model, success: false, error: 'cooling down', latency: 0 });
         continue;
       }
