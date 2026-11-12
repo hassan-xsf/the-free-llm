@@ -6,6 +6,7 @@ import { CohereProvider } from './cohere';
 import { MistralProvider } from './mistral';
 import { CloudflareProvider } from './cloudflare';
 import { AionLabsProvider } from './aionlabs';
+import { LLM7Provider } from './llm7';
 
 class ProviderRegistry {
   private providers = new Map<string, Provider>();
@@ -43,5 +44,6 @@ registry.register(new MistralProvider());
 registry.register(new GeminiProvider());
 registry.register(new CohereProvider());
 registry.register(new OpenRouterProvider());
+registry.register(new LLM7Provider());
 registry.register(new CloudflareProvider());
 registry.register(new AionLabsProvider());

@@ -17,6 +17,10 @@ export class GroqProvider implements Provider {
     const body: any = { model, messages };
     if (options.temperature !== undefined) body.temperature = options.temperature;
     if (options.maxTokens !== undefined) body.max_tokens = options.maxTokens;
+    // gpt-oss burns hidden reasoning tokens against the daily cap; keep it short.
+    if (model.startsWith('openai/gpt-oss')) body.reasoning_effort = 'low';
+    // Free-tier qwen rejects any request whose max_tokens exceeds its 1000 output-tokens/min cap.
+    if (model.startsWith('qwen/')) body.max_tokens = Math.min(body.max_tokens ?? 1000, 1000);
 
     try {
       const res = await axios.post(url, body, {

@@ -2,7 +2,7 @@
  * TheFreeLLM — Cloudflare Worker edition.
  *
  * A dependency-free port of the Express app: one free LLM endpoint that fails
- * over Gemini -> Groq -> OpenRouter -> Cohere -> Mistral -> Cloudflare ->
+ * over Groq -> Mistral -> Gemini -> Cohere -> OpenRouter -> LLM7 -> Cloudflare ->
  * AionLabs (free tiers first, then cheapest paid). Uses native fetch only (no axios, no
  * Express, no filesystem), so it runs on the Workers runtime as-is.
  *
@@ -21,13 +21,20 @@ interface Env {
   CLOUDFLARE_ACCOUNT_ID?: string;
   CLOUDFLARE_API_TOKEN?: string;
   AION_LABS_API_KEY?: string;
+  LLM7_API_KEY?: string;
   SECRET_TOKEN?: string;
+  COOLDOWNS?: KVNamespace;
 }
 
 type FailureKind = 'rate_limit' | 'timeout' | 'network' | 'error';
 
 class ProviderError extends Error {
-  constructor(message: string, public kind: FailureKind, public statusCode?: number) {
+  constructor(
+    message: string,
+    public kind: FailureKind,
+    public statusCode?: number,
+    public retryAfterSec?: number
+  ) {
     super(message);
   }
 }
@@ -61,7 +68,9 @@ const TIMEOUT_MS = 30000;
 // same provider before failing over to the next provider.
 const MODELS = {
   gemini: ['gemini-2.5-flash', 'gemini-3.5-flash', 'gemini-3.5-flash-lite', 'gemini-2.5-flash-lite'],
-  groq: ['openai/gpt-oss-120b', 'openai/gpt-oss-20b', 'groq/compound-mini', 'groq/compound'],
+  // Groq's daily token cap is per model, so each extra model is extra headroom.
+  // (Llama models are gone from Groq; only these three general chat models remain.)
+  groq: ['openai/gpt-oss-120b', 'qwen/qwen3.8-27b', 'openai/gpt-oss-20b'],
   openrouter: [
     'nvidia/nemotron-3-super-120b-a12b:free',
     'minimax/minimax-m3:free',
@@ -80,6 +89,9 @@ const MODELS = {
   // -medium return 429 regardless of volume, so they're left out of the pool
   // rather than wasting a failover attempt on a guaranteed rejection.
   mistral: ['ministral-14b-latest', 'ministral-8b-latest', 'ministral-3b-latest'],
+  // Free key only serves these two (the "turbo" tier); every other LLM7 model
+  // returns 402 insufficient balance.
+  llm7: ['mistral-Nemo-Instruct-2407', 'codestral-latest'],
   // Workers AI is paid-per-token (no free tier), so this pool is ordered
   // cheapest-first by blended price: qwen3-30b is a 30B MoE billed at the 3B
   // rate, and granite-micro is the cheapest model on the platform.
@@ -108,6 +120,7 @@ const rotation: Record<string, number> = {
   openrouter: 0,
   cohere: 0,
   mistral: 0,
+  llm7: 0,
   cloudflare: 0,
   aionlabs: 0,
 };
@@ -156,7 +169,8 @@ async function postJSON(
     const msg =
       data?.error?.message || data?.errors?.[0]?.message || data?.message || `HTTP ${res.status}`;
     if (res.status === 429 || /quota|rate limit|capacity|trial/i.test(msg)) {
-      throw new ProviderError(msg, 'rate_limit', res.status);
+      const retryAfter = parseInt(res.headers.get('retry-after') || '', 10);
+      throw new ProviderError(msg, 'rate_limit', res.status, retryAfter > 0 ? retryAfter : undefined);
     }
     if (res.status === 502 || res.status === 503 || res.status === 504) {
       throw new ProviderError(msg, 'network', res.status);
@@ -198,6 +212,10 @@ const groq: Provider = {
     const body: any = { model, messages };
     if (options.temperature !== undefined) body.temperature = options.temperature;
     if (options.maxTokens !== undefined) body.max_tokens = options.maxTokens;
+    // gpt-oss burns hidden reasoning tokens against the daily cap; keep it short.
+    if (model.startsWith('openai/gpt-oss')) body.reasoning_effort = 'low';
+    // Free-tier qwen rejects any request whose max_tokens exceeds its 1000 output-tokens/min cap.
+    if (model.startsWith('qwen/')) body.max_tokens = Math.min(body.max_tokens ?? 1000, 1000);
 
     const data = await postJSON(
       'https://api.groq.com/openai/v1/chat/completions',
@@ -316,6 +334,30 @@ const aionlabs: Provider = {
   },
 };
 
+const llm7: Provider = {
+  name: 'llm7',
+  models: MODELS.llm7,
+  isConfigured: (env) => Boolean(env.LLM7_API_KEY),
+  async generate(prompt, model, options, env) {
+    const messages: any[] = [];
+    if (options.system) messages.push({ role: 'system', content: options.system });
+    messages.push({ role: 'user', content: prompt });
+    const body: any = { model, messages };
+    if (options.temperature !== undefined) body.temperature = options.temperature;
+    if (options.maxTokens !== undefined) body.max_tokens = options.maxTokens;
+
+    const data = await postJSON(
+      'https://api.llm7.io/v1/chat/completions',
+      body,
+      { Authorization: `Bearer ${env.LLM7_API_KEY}` },
+      options.timeoutMs || TIMEOUT_MS
+    );
+    const text: string = data?.choices?.[0]?.message?.content || '';
+    if (!text) throw new ProviderError('Empty response from LLM7', 'error');
+    return { text, model, provider: 'llm7' };
+  },
+};
+
 const cloudflare: Provider = {
   name: 'cloudflare',
   models: MODELS.cloudflare,
@@ -345,7 +387,29 @@ const cloudflare: Provider = {
 // Failover priority: first = highest priority. Free tiers run first; the
 // paid-per-token providers trail them, cheapest first (Cloudflare ~$0.05/M in,
 // AionLabs ~$0.70/M and roleplay-tuned rather than general purpose).
-const PROVIDERS: Provider[] = [groq, mistral, gemini, cohere, openrouter, cloudflare, aionlabs];
+const PROVIDERS: Provider[] = [groq, mistral, gemini, cohere, openrouter, llm7, cloudflare, aionlabs];
+
+// --- cooldowns ----------------------------------------------------------------
+
+// Rate-limited models are skipped until their cooldown expires. Stored as one KV
+// key ({ "provider/model": expiresAtMs }) so a request costs one read, and at most
+// one write when something 429s. Limits are per model (Groq, Mistral), so the
+// cooldown is too: one model 429ing doesn't bench its siblings.
+// ponytail: concurrent writes can drop each other's entries; worst case is one
+// extra 429. Move to a Durable Object if that ever matters.
+const COOLDOWN_KEY = 'cooldowns';
+const DEFAULT_COOLDOWN_SEC = 10 * 60;
+
+async function loadCooldowns(env: Env): Promise<Record<string, number>> {
+  if (!env.COOLDOWNS) return {};
+  const all = ((await env.COOLDOWNS.get(COOLDOWN_KEY, 'json').catch(() => null)) || {}) as Record<
+    string,
+    number
+  >;
+  const now = Date.now();
+  for (const k of Object.keys(all)) if (all[k] <= now) delete all[k];
+  return all;
+}
 
 // --- routing / failover -------------------------------------------------------
 
@@ -365,6 +429,24 @@ async function route(
   options: GenerateOptions,
   env: Env
 ): Promise<RouteResult> {
+  const cooldowns = await loadCooldowns(env);
+  const before = JSON.stringify(cooldowns);
+  const result = await routeWith(query, requestedProvider, options, env, cooldowns);
+  if (env.COOLDOWNS && JSON.stringify(cooldowns) !== before) {
+    // KV's minimum TTL is 60s; entries carry their own expiry anyway.
+    const ttl = Math.max(60, Math.ceil((Math.max(...Object.values(cooldowns)) - Date.now()) / 1000));
+    await env.COOLDOWNS.put(COOLDOWN_KEY, JSON.stringify(cooldowns), { expirationTtl: ttl }).catch(() => {});
+  }
+  return result;
+}
+
+async function routeWith(
+  query: string,
+  requestedProvider: string | undefined,
+  options: GenerateOptions,
+  env: Env,
+  cooldowns: Record<string, number>
+): Promise<RouteResult> {
   const attempts: RouteResult['attempts'] = [];
 
   // Try one model. Returns a success result, or null (with the error recorded).
@@ -379,6 +461,9 @@ async function route(
       const latency = Date.now() - start;
       const pe = err instanceof ProviderError ? err : new ProviderError(String(err), 'error');
       attempts.push({ provider: p.name, model, success: false, error: pe.message, latency });
+      if (pe.kind === 'rate_limit') {
+        cooldowns[`${p.name}/${model}`] = Date.now() + (pe.retryAfterSec || DEFAULT_COOLDOWN_SEC) * 1000;
+      }
       return null;
     }
   };
@@ -391,6 +476,10 @@ async function route(
       ? [options.model]
       : rotatedModels(p.name as keyof typeof MODELS);
     for (const model of models) {
+      if (cooldowns[`${p.name}/${model}`]) {
+        attempts.push({ provider: p.name, model, success: false, error: 'cooling down', latency: 0 });
+        continue;
+      }
       const result = await tryModel(p, model);
       if (result) return result;
     }

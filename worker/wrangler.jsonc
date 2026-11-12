@@ -5,5 +5,12 @@
   "compatibility_date": "2026-08-01",
   "observability": {
     "enabled": true
-  }
+  },
+  // Per-model 429 cooldowns. KV, not the Cache API: Cache API is a no-op on workers.dev.
+  "kv_namespaces": [
+    {
+      "binding": "COOLDOWNS",
+      "id": "053226b4a23946c49dd954b115b2df8c"
+    }
+  ]
 }

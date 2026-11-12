@@ -52,6 +52,12 @@ const mistralCatalog: ModelInfo[] = [
   { id: 'ministral-3b-latest', label: 'Ministral 3B', contextK: 128, cost: 'free-tier', family: 'Mistral', notes: 'Fastest' },
 ];
 
+// LLM7 — only the free "turbo" tier is listed; other LLM7 models need a paid balance.
+const llm7Catalog: ModelInfo[] = [
+  { id: 'mistral-Nemo-Instruct-2407', label: 'Mistral Nemo 12B', contextK: 128, cost: 'free', family: 'Mistral', popular: true, notes: 'Default' },
+  { id: 'codestral-latest', label: 'Codestral', contextK: 32, cost: 'free', family: 'Mistral', notes: 'Code-tuned' },
+];
+
 // AionLabs — roleplay/storytelling specialist. Paid; USD per million tokens.
 const aionlabsCatalog: ModelInfo[] = [
   { id: 'aion-labs/aion-3.0-mini', label: 'Aion 3.0 Mini', contextK: 128, cost: 'paid', promptPrice: 0.7, completionPrice: 1.4, family: 'Aion', popular: true, notes: 'Default — cheapest' },
@@ -202,6 +208,7 @@ router.get('/models.json', async (_req, res) => {
     openrouter,
     cohere: cohereCatalog,
     mistral: mistralCatalog,
+    llm7: llm7Catalog,
     cloudflare: cloudflareCatalog,
     aionlabs: aionlabsCatalog,
   });

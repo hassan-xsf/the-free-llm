@@ -8,6 +8,9 @@ COHERE_API_KEY=
 # Free-tier Mistral keys only serve the `ministral-*` models.
 MISTRAL_API_KEY=
 
+# Free; the key only unlocks Mistral Nemo + Codestral.
+LLM7_API_KEY=
+
 # Paid-per-token, so these trail the free tiers (cheapest first).
 CLOUDFLARE_ACCOUNT_ID=
 CLOUDFLARE_API_TOKEN=

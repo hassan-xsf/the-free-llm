@@ -38,7 +38,9 @@ export const config = {
     groq: {
       name: 'groq',
       apiKey: process.env.GROQ_API_KEY || '',
-      models: ['openai/gpt-oss-120b', 'openai/gpt-oss-20b', 'groq/compound-mini', 'groq/compound'],
+      // Groq's daily token cap is per model, so each extra model is extra headroom.
+      // (Llama models are gone from Groq; only these three general chat models remain.)
+      models: ['openai/gpt-oss-120b', 'qwen/qwen3.8-27b', 'openai/gpt-oss-20b'],
       defaultModel: 'openai/gpt-oss-120b',
       priority: 1,
       timeoutMs: 30000,
@@ -83,6 +85,16 @@ export const config = {
       priority: 2,
       timeoutMs: 30000,
     } as ProviderConfig,
+    llm7: {
+      name: 'llm7',
+      apiKey: process.env.LLM7_API_KEY || '',
+      // Free key only serves these two (the "turbo" tier); every other LLM7 model
+      // returns 402 insufficient balance. Free: 120 RPM with a token, 30 without.
+      models: ['mistral-Nemo-Instruct-2407', 'codestral-latest'],
+      defaultModel: 'mistral-Nemo-Instruct-2407',
+      priority: 6,
+      timeoutMs: 30000,
+    } as ProviderConfig,
     cloudflare: {
       name: 'cloudflare',
       apiKey: process.env.CLOUDFLARE_API_TOKEN || '',
@@ -98,7 +110,7 @@ export const config = {
         '@cf/ibm-granite/granite-4.0-h-micro',
       ],
       defaultModel: '@cf/qwen/qwen3-30b-a3b-fp8',
-      priority: 6,
+      priority: 7,
       timeoutMs: 30000,
     } as ProviderConfig,
     aionlabs: {
@@ -113,7 +125,7 @@ export const config = {
         'aion-labs/aion-3.0',
       ],
       defaultModel: 'aion-labs/aion-3.0-mini',
-      priority: 7,
+      priority: 8,
       timeoutMs: 30000,
     } as ProviderConfig,
   },
@@ -130,6 +142,7 @@ export const providerOrder = [
   'gemini',
   'cohere',
   'openrouter',
+  'llm7',
   'cloudflare',
   'aionlabs',
 ] as const;
